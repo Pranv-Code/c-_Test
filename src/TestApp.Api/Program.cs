@@ -3,9 +3,16 @@ using TestApp.Api.Data;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Ensure Kestrel listens on port 8080, 80, and Railway's PORT environment variable
-var railwayPort = Environment.GetEnvironmentVariable("PORT") ?? "8080";
-builder.WebHost.UseUrls("http://*:8080", "http://*:80", $"http://*:{railwayPort}");
+// Ensure Kestrel listens on non-privileged ports for .NET 8 non-root container compatibility
+var railwayPort = Environment.GetEnvironmentVariable("PORT");
+if (!string.IsNullOrWhiteSpace(railwayPort) && railwayPort != "8080")
+{
+    builder.WebHost.UseUrls("http://*:8080", $"http://*:{railwayPort}");
+}
+else
+{
+    builder.WebHost.UseUrls("http://*:8080");
+}
 
 // Add services to the container.
 builder.Services.AddControllers();
