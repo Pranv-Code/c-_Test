@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 using TestApp.Api.Controllers;
 using TestApp.Api.Data;
 using TestApp.Api.DTOs;
@@ -29,7 +30,7 @@ public class CommentsControllerTests
         context.Comments.AddRange(older, newer);
         await context.SaveChangesAsync();
 
-        var controller = new CommentsController(context);
+        var controller = new CommentsController(context, NullLogger<CommentsController>.Instance);
 
         // Act
         var actionResult = await controller.GetComments();
@@ -48,7 +49,7 @@ public class CommentsControllerTests
     {
         // Arrange
         using var context = GetInMemoryDbContext();
-        var controller = new CommentsController(context);
+        var controller = new CommentsController(context, NullLogger<CommentsController>.Instance);
         var dto = new CreateCommentDto { Name = "Nuke", Comment = "Hello from user 1" };
 
         // Act
@@ -75,7 +76,7 @@ public class CommentsControllerTests
     {
         // Arrange
         using var context = GetInMemoryDbContext();
-        var controller = new CommentsController(context);
+        var controller = new CommentsController(context, NullLogger<CommentsController>.Instance);
         var dto = new CreateCommentDto { Name = name, Comment = comment };
 
         // Act

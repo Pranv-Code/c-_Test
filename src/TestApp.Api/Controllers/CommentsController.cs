@@ -11,10 +11,12 @@ namespace TestApp.Api.Controllers;
 public class CommentsController : ControllerBase
 {
     private readonly AppDbContext _context;
+    private readonly ILogger<CommentsController> _logger;
 
-    public CommentsController(AppDbContext context)
+    public CommentsController(AppDbContext context, ILogger<CommentsController> logger)
     {
         _context = context;
+        _logger = logger;
     }
 
     /// <summary>
@@ -24,19 +26,27 @@ public class CommentsController : ControllerBase
     [HttpGet]
     public async Task<ActionResult<IEnumerable<CommentResponseDto>>> GetComments()
     {
-        var comments = await _context.Comments
-            .AsNoTracking()
-            .OrderByDescending(c => c.CreatedAt)
-            .Select(c => new CommentResponseDto
-            {
-                Id = c.Id,
-                Name = c.Name,
-                Comment = c.CommentText,
-                CreatedAt = c.CreatedAt
-            })
-            .ToListAsync();
+        try
+        {
+            var comments = await _context.Comments
+                .AsNoTracking()
+                .OrderByDescending(c => c.CreatedAt)
+                .Select(c => new CommentResponseDto
+                {
+                    Id = c.Id,
+                    Name = c.Name,
+                    Comment = c.CommentText,
+                    CreatedAt = c.CreatedAt
+                })
+                .ToListAsync();
 
-        return Ok(comments);
+            return Ok(comments);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching comments from database");
+            return StatusCode(500, new { error = "Database error", details = ex.Message });
+        }
     }
 
     /// <summary>
@@ -51,24 +61,32 @@ public class CommentsController : ControllerBase
             return BadRequest(new { message = "Name and Comment are required and cannot be empty." });
         }
 
-        var comment = new Comment
+        try
         {
-            Name = dto.Name.Trim(),
-            CommentText = dto.Comment.Trim(),
-            CreatedAt = DateTime.UtcNow
-        };
+            var comment = new Comment
+            {
+                Name = dto.Name.Trim(),
+                CommentText = dto.Comment.Trim(),
+                CreatedAt = DateTime.UtcNow
+            };
 
-        _context.Comments.Add(comment);
-        await _context.SaveChangesAsync();
+            _context.Comments.Add(comment);
+            await _context.SaveChangesAsync();
 
-        var responseDto = new CommentResponseDto
+            var responseDto = new CommentResponseDto
+            {
+                Id = comment.Id,
+                Name = comment.Name,
+                Comment = comment.CommentText,
+                CreatedAt = comment.CreatedAt
+            };
+
+            return CreatedAtAction(nameof(GetComments), new { id = comment.Id }, responseDto);
+        }
+        catch (Exception ex)
         {
-            Id = comment.Id,
-            Name = comment.Name,
-            Comment = comment.CommentText,
-            CreatedAt = comment.CreatedAt
-        };
-
-        return CreatedAtAction(nameof(GetComments), new { id = comment.Id }, responseDto);
+            _logger.LogError(ex, "Error saving comment to database");
+            return StatusCode(500, new { error = "Database save error", details = ex.Message });
+        }
     }
 }
