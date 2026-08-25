@@ -52,6 +52,8 @@ app.UseSwaggerUI();
 
 app.UseCors("AllowAll");
 app.UseAuthorization();
+
+app.MapGet("/", () => Results.Ok(new { status = "online", service = "TestApp.Api", time = DateTime.UtcNow }));
 app.MapControllers();
 
 // Ensure DB schema and Comments table exist on startup
