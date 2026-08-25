@@ -44,6 +44,8 @@ else
 
 var app = builder.Build();
 
+app.UseDeveloperExceptionPage();
+
 // Enable Swagger in Development and Staging
 app.UseSwagger();
 app.UseSwaggerUI();
@@ -52,7 +54,7 @@ app.UseCors("AllowAll");
 app.UseAuthorization();
 app.MapControllers();
 
-// Ensure DB migrations are applied on startup (if using relational DB like PostgreSQL)
+// Ensure DB migrations are applied on startup (if using relational DB like PostgreSQL) or EnsureCreated (if in-memory)
 using (var scope = app.Services.CreateScope())
 {
     var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -62,11 +64,15 @@ using (var scope = app.Services.CreateScope())
         {
             dbContext.Database.Migrate();
         }
+        else
+        {
+            dbContext.Database.EnsureCreated();
+        }
     }
     catch (Exception ex)
     {
         var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
-        logger.LogWarning(ex, "Could not apply database migrations on startup. Please ensure connection string is valid and database is running.");
+        logger.LogWarning(ex, "Could not initialize database on startup: {Message}", ex.Message);
     }
 }
 
