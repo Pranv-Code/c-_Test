@@ -3,6 +3,10 @@ using TestApp.Api.Data;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Configure Kestrel to listen on PORT specified by Railway environment variable (default 8080)
+var port = Environment.GetEnvironmentVariable("PORT") ?? "8080";
+builder.WebHost.UseUrls($"http://*:{port}");
+
 // Add services to the container.
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
