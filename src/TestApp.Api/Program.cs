@@ -20,19 +20,29 @@ builder.Services.AddCors(options =>
 });
 
 // Configure Database Connection
-bool useInMemory = builder.Configuration.GetValue<bool>("UseInMemoryDatabase") || 
-                  string.Equals(Environment.GetEnvironmentVariable("USE_IN_MEMORY_DB"), "true", StringComparison.OrdinalIgnoreCase);
+string? rawConnStr = builder.Configuration.GetConnectionString("DefaultConnection");
+if (string.IsNullOrWhiteSpace(rawConnStr) || rawConnStr.Contains("localhost"))
+{
+    string? envDbUrl = Environment.GetEnvironmentVariable("DATABASE_URL");
+    if (!string.IsNullOrWhiteSpace(envDbUrl))
+    {
+        rawConnStr = envDbUrl;
+    }
+}
 
-if (useInMemory)
+bool forceInMemory = builder.Configuration.GetValue<bool>("UseInMemoryDatabase") || 
+                     string.Equals(Environment.GetEnvironmentVariable("USE_IN_MEMORY_DB"), "true", StringComparison.OrdinalIgnoreCase);
+
+if (forceInMemory || string.IsNullOrWhiteSpace(rawConnStr) || rawConnStr.Contains("localhost"))
 {
     builder.Services.AddDbContext<AppDbContext>(options =>
         options.UseInMemoryDatabase("TestAppInMemoryDb"));
 }
 else
 {
-    string connectionString = GetPostgresConnectionString(builder.Configuration);
+    string npgsqlConnectionString = ConvertPostgresUriToConnectionString(rawConnStr);
     builder.Services.AddDbContext<AppDbContext>(options =>
-        options.UseNpgsql(connectionString));
+        options.UseNpgsql(npgsqlConnectionString));
 }
 
 var app = builder.Build();
@@ -65,30 +75,14 @@ using (var scope = app.Services.CreateScope())
 
 app.Run();
 
-// Helper method to resolve PostgreSQL connection string from standard config or Railway DATABASE_URL environment variable
-static string GetPostgresConnectionString(IConfiguration configuration)
-{
-    // Check standard configuration / env var (ConnectionStrings:DefaultConnection or ConnectionStrings__DefaultConnection)
-    string? rawConnectionString = configuration.GetConnectionString("DefaultConnection") 
-        ?? Environment.GetEnvironmentVariable("DATABASE_URL");
-
-    if (string.IsNullOrWhiteSpace(rawConnectionString))
-    {
-        // Fallback default local connection string for development
-        return "Host=localhost;Port=5432;Database=TestAppDb;Username=postgres;Password=postgres";
-    }
-
-    // Convert Railway postgres:// URI format to Npgsql connection string format if needed
-    if (rawConnectionString.StartsWith("postgres://") || rawConnectionString.StartsWith("postgresql://"))
-    {
-        return ConvertPostgresUriToConnectionString(rawConnectionString);
-    }
-
-    return rawConnectionString;
-}
-
 static string ConvertPostgresUriToConnectionString(string uriString)
 {
+    if (string.IsNullOrWhiteSpace(uriString)) return string.Empty;
+    if (!uriString.StartsWith("postgres://") && !uriString.StartsWith("postgresql://"))
+    {
+        return uriString;
+    }
+
     var uri = new Uri(uriString);
     var userInfo = uri.UserInfo.Split(':');
     var username = userInfo.Length > 0 ? Uri.UnescapeDataString(userInfo[0]) : "";
