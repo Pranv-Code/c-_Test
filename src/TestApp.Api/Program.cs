@@ -20,29 +20,26 @@ builder.Services.AddCors(options =>
 });
 
 // Configure Database Connection
-string? rawConnStr = builder.Configuration.GetConnectionString("DefaultConnection");
-if (string.IsNullOrWhiteSpace(rawConnStr) || rawConnStr.Contains("localhost"))
-{
-    string? envDbUrl = Environment.GetEnvironmentVariable("DATABASE_URL");
-    if (!string.IsNullOrWhiteSpace(envDbUrl))
-    {
-        rawConnStr = envDbUrl;
-    }
-}
+string? envDbUrl = Environment.GetEnvironmentVariable("DATABASE_URL");
+string? configConnStr = builder.Configuration.GetConnectionString("DefaultConnection");
 
 bool forceInMemory = builder.Configuration.GetValue<bool>("UseInMemoryDatabase") || 
                      string.Equals(Environment.GetEnvironmentVariable("USE_IN_MEMORY_DB"), "true", StringComparison.OrdinalIgnoreCase);
 
-if (forceInMemory || string.IsNullOrWhiteSpace(rawConnStr) || rawConnStr.Contains("localhost"))
+if (forceInMemory || (string.IsNullOrWhiteSpace(envDbUrl) && (string.IsNullOrWhiteSpace(configConnStr) || configConnStr.Contains("localhost"))))
 {
+    // Fallback to In-Memory DB if DATABASE_URL is not set
     builder.Services.AddDbContext<AppDbContext>(options =>
         options.UseInMemoryDatabase("TestAppInMemoryDb"));
 }
 else
 {
-    string npgsqlConnectionString = ConvertPostgresUriToConnectionString(rawConnStr);
+    string targetConnectionString = !string.IsNullOrWhiteSpace(envDbUrl) 
+        ? ConvertPostgresUriToConnectionString(envDbUrl) 
+        : configConnStr!;
+
     builder.Services.AddDbContext<AppDbContext>(options =>
-        options.UseNpgsql(npgsqlConnectionString));
+        options.UseNpgsql(targetConnectionString));
 }
 
 var app = builder.Build();
