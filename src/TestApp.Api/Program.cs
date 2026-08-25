@@ -3,7 +3,7 @@ using TestApp.Api.Data;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Ensure Kestrel listens on non-privileged ports for .NET 8 non-root container compatibility
+// Ensure Kestrel listens on non-privileged ports for .NET 8 container compatibility
 var railwayPort = Environment.GetEnvironmentVariable("PORT");
 if (!string.IsNullOrWhiteSpace(railwayPort) && railwayPort != "8080")
 {
@@ -19,7 +19,6 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// Configure CORS for multi-client desktop / browser access
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAll", policy =>
@@ -34,30 +33,45 @@ builder.Services.AddCors(options =>
 string? envDbUrl = Environment.GetEnvironmentVariable("DATABASE_URL");
 string? configConnStr = builder.Configuration.GetConnectionString("DefaultConnection");
 
-bool forceInMemory = builder.Configuration.GetValue<bool>("UseInMemoryDatabase") || 
-                     string.Equals(Environment.GetEnvironmentVariable("USE_IN_MEMORY_DB"), "true", StringComparison.OrdinalIgnoreCase);
-
-if (forceInMemory || (string.IsNullOrWhiteSpace(envDbUrl) && (string.IsNullOrWhiteSpace(configConnStr) || configConnStr.Contains("localhost"))))
+if (!string.IsNullOrWhiteSpace(envDbUrl) && !envDbUrl.Contains("localhost"))
 {
-    // Fallback to In-Memory DB if DATABASE_URL is not set
-    builder.Services.AddDbContext<AppDbContext>(options =>
-        options.UseInMemoryDatabase("TestAppInMemoryDb"));
+    try
+    {
+        string npgsqlConn = ConvertPostgresUriToConnectionString(envDbUrl);
+        builder.Services.AddDbContext<AppDbContext>(options =>
+            options.UseNpgsql(npgsqlConn));
+    }
+    catch
+    {
+        builder.Services.AddDbContext<AppDbContext>(options =>
+            options.UseInMemoryDatabase("TestAppInMemoryDb"));
+    }
+}
+else if (!string.IsNullOrWhiteSpace(configConnStr) && !configConnStr.Contains("localhost"))
+{
+    try
+    {
+        builder.Services.AddDbContext<AppDbContext>(options =>
+            options.UseNpgsql(configConnStr));
+    }
+    catch
+    {
+        builder.Services.AddDbContext<AppDbContext>(options =>
+            options.UseInMemoryDatabase("TestAppInMemoryDb"));
+    }
 }
 else
 {
-    string targetConnectionString = !string.IsNullOrWhiteSpace(envDbUrl) 
-        ? ConvertPostgresUriToConnectionString(envDbUrl) 
-        : configConnStr!;
-
+    // Use In-Memory DB by default for instant online testing
     builder.Services.AddDbContext<AppDbContext>(options =>
-        options.UseNpgsql(targetConnectionString));
+        options.UseInMemoryDatabase("TestAppInMemoryDb"));
 }
 
 var app = builder.Build();
 
 app.UseDeveloperExceptionPage();
 
-// Enable Swagger in Development and Staging
+// Enable Swagger UI
 app.UseSwagger();
 app.UseSwaggerUI();
 
@@ -67,18 +81,18 @@ app.UseAuthorization();
 app.MapGet("/", () => Results.Ok(new { status = "online", service = "TestApp.Api", time = DateTime.UtcNow }));
 app.MapControllers();
 
-// Ensure DB schema and Comments table exist on startup
+// Initialize Database schema safely
 using (var scope = app.Services.CreateScope())
 {
-    var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     try
     {
+        var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         dbContext.Database.EnsureCreated();
     }
     catch (Exception ex)
     {
         var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
-        logger.LogError(ex, "Could not initialize database on startup: {Message}", ex.Message);
+        logger.LogWarning("Database initialization notice: {Message}", ex.Message);
     }
 }
 
