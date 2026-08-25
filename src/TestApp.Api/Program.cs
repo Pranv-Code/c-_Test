@@ -54,25 +54,18 @@ app.UseCors("AllowAll");
 app.UseAuthorization();
 app.MapControllers();
 
-// Ensure DB migrations are applied on startup (if using relational DB like PostgreSQL) or EnsureCreated (if in-memory)
+// Ensure DB schema and Comments table exist on startup
 using (var scope = app.Services.CreateScope())
 {
     var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     try
     {
-        if (dbContext.Database.IsRelational())
-        {
-            dbContext.Database.Migrate();
-        }
-        else
-        {
-            dbContext.Database.EnsureCreated();
-        }
+        dbContext.Database.EnsureCreated();
     }
     catch (Exception ex)
     {
         var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
-        logger.LogWarning(ex, "Could not initialize database on startup: {Message}", ex.Message);
+        logger.LogError(ex, "Could not initialize database on startup: {Message}", ex.Message);
     }
 }
 
