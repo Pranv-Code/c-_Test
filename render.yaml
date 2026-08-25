@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: testapp-api
+    runtime: docker
+    dockerfilePath: Dockerfile
+    plan: free
+    region: oregon
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: testapp-db
+          property: connectionString
+
+databases:
+  - name: testapp-db
+    plan: free
+    databaseName: testapp_db
+    user: testapp_user
